@@ -23,7 +23,7 @@
       - epel-release
       - yum-plugin-protectbase.noarch
 
-    - name: Install mod_evasive for Apache
+    - name: Install mod_evasive 1.10.1 for Apache
       yum:
         name: mod_evasive-1.10.1-22.el7
         state: latest
@@ -149,7 +149,7 @@
     - name: Add apache user to apache group
       shell: usermod -g apache apache
 
-    - name: Change the owner of directories to launch httpd with apache user instead of root
+    - name: Change the owner of some directories to launch httpd with apache user instead of root
       file:     
         path: "{{item}}"
         state: directory

@@ -20,13 +20,8 @@
         - '/exports/export_staff'
         - '/exports/export_workers'
 
-    - name: Check if /config_files/exports exists
-      stat: path=/config_files/exports
-      register: exports_stat
-
     - name: Move /config_files/exports to /etc/exports
       command: mv /config_files/exports /etc/exports
-      when: exports_stat.stat.exists
 
     - name: Move /config_files/nfs.conf to /etc/nfs.conf
       command: mv /config_files/nfs.conf /etc/nfs.conf

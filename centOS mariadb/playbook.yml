@@ -8,7 +8,7 @@
     - name: Add REPO to install MariaDB 10.3.16
       command: mv /config_files/mariadb.repo /etc/yum.repos.d/mariadb.repo
 
-    - name: Remove hostname utility
+    - name: Remove hostname utility (to avoid a bug which detects hostname utility as installed)
       yum:
         name: hostname
         state: absent
@@ -18,7 +18,7 @@
         name: hostname
         state: latest
 
-    - name: Install which utility
+    - name: Install which utility (necessary for secure-mysql.sh script)
       yum:
         name: which
         state: latest

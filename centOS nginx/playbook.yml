@@ -21,7 +21,7 @@
     - name: Install httpd-tools in order to use htpasswd
       yum: name=httpd-tools state=installed
 
-    - name: Set modsecurity.conf in place
+    - name: Put modsecurity.conf in place
       command: mv /config_files/modsecurity.conf /etc/nginx/modsec/modsecurity.conf
 
     - name: Include Owasp CRS configuration

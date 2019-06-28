@@ -132,19 +132,19 @@
       - name: Create credentials for smbuser with pass smbpass
         command: sh /config_files/adduser_samba.sh
 
-      - name: Set sticky bit + 755 on /home/smbuser/public to allow writing but no remove
+      - name: Set sticky bit + 755 on /home/smbuser/public
         file:
           path: /home/smbuser/public
           mode: u=rwx,g=rx,o=rx,a+t
           state: directory
 
-      - name: Set sticky bit + 755 on /home/smbuser/shared to allow writing but no remove
+      - name: Set sticky bit + 755 on /home/smbuser/shared
         file:
           path: /home/smbuser/shared
           mode: u=rwx,g=rx,o=rx,a+t
           state: directory
 
-      - name: Set sticky bit + 775 on /home/smbuser/protected to allow writing but no remove
+      - name: Set sticky bit + 775 on /home/smbuser/protected
         file:
           path: /home/smbuser/protected
           mode: u=rwx,g=rwx,o=rx,a+t
