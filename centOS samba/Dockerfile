@@ -20,4 +20,4 @@ EXPOSE 445
 
 ENTRYPOINT ["/run-samba.sh"]
 
-#CMD smbd -FS --no-process-group < /dev/null
+#CMD smbd -F --no-process-group < /dev/null
