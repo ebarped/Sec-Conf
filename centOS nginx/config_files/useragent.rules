@@ -1,0 +1,10 @@
+map $http_user_agent $badagent {
+        default         0;
+        ~*malicious     1;
+        ~*backdoor      1;
+        ~*netcrawler    1;
+        ~Antivirx       1;
+        ~Arian          1;
+        ~webbandit      1;
+        ~*Chrome	    1;
+}

@@ -1,0 +1,4 @@
+docker run -d --privileged -v "$(pwd)/exports:/exports" -v "$(pwd)/exports_real:/exports_real" local/centos-nfs:1.0
+
+#Remember to delete ENTRYPOINT section
+docker run -it --privileged -v "$(pwd)/exports:/exports" -v "$(pwd)/exports_real:/exports_real" local/centos-nfs:1.0 /bin/bash

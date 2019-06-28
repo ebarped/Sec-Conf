@@ -1,0 +1,7 @@
+AuthName "Digest"
+AuthType Digest
+AuthDigestDomain /cpanel
+AuthUserFile .users_digest
+AuthDigestQoP auth
+AuthDigestProvider file
+Require valid-user

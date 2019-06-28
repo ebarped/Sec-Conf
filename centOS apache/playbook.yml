@@ -1,0 +1,184 @@
+---
+- name: Secure configuration for Apache
+  hosts: 127.0.0.1
+  connection: local
+  become: yes
+  tasks:
+
+    - name: Install Apache 2.4.6
+      yum:
+        name: httpd-2.4.6-89.el7.centos
+        state: latest
+
+    - name: Install mod_ssl-2.4.6 for Apache
+      yum:
+        name: mod_ssl-2.4.6-89.el7.centos
+        state: latest
+
+    - name: Install dependencies of mod_evasive for Apache
+      yum:
+        name: "{{ item }}"
+        state: latest
+      with_items:
+      - epel-release
+      - yum-plugin-protectbase.noarch
+
+    - name: Install mod_evasive for Apache
+      yum:
+        name: mod_evasive-1.10.1-22.el7
+        state: latest
+
+    - name: Install mod_security-2.9.2 for Apache
+      yum:
+        name: "{{ item }}"
+        state: latest
+      with_items:
+      - mod_security-2.9.2-1.el7
+      - mod_security_crs-2.2.9-1.el7
+
+    - name: Install unzip to extract ModSecurity
+      yum:
+        name: unzip
+        state: latest
+
+    - name: Download and extract the Owasp ModSecurity Core Rule Set
+      unarchive:
+        src: https://github.com/SpiderLabs/owasp-modsecurity-crs/archive/v3.2/dev.zip
+        dest: /
+        remote_src: yes
+
+    - name: Uninstall unzip to clear the container
+      yum:
+        name: unzip
+        state: absent
+
+    - name: Disable welcome page
+      file: path='/etc/httpd/conf.d/welcome.conf' state=absent
+
+    - name: Create sites-available directory
+      file: path='/etc/httpd/sites-available' state=directory
+    - name: Create sites-enabled directory
+      file: path='/etc/httpd/sites-enabled' state=directory 
+    - name: Create test_web directory
+      file: path='/var/www/test_web/' state=directory
+    - name: Create test_web_SSL directory
+      file: path='/var/www/test_web_SSL/' state=directory
+    - name: Create /etc/pki/tls/certs directory to store SSL certs
+      file: path='/etc/pki/tls/certs' state=directory
+    - name: Create /etc/pki/tls/private directory to store SSL certs
+      file: path='/etc/pki/tls/private/' state=directory
+    - name: Create /var/log/mod_evasive directory to store mod_evasive logs
+      file: path='/var/log/mod_evasive' state=directory
+    - name: Create /etc/modsecurity/ directory to store ModSecurity Owasp CRS rules
+      file: path='/etc/modsecurity/' state=directory
+
+    - name: Copy httpd.conf in /etc/httpd/conf/httpd.conf
+      command: cp /config_files/httpd.conf /etc/httpd/conf/httpd.conf
+
+    - name: Copy test_web structure
+      command: cp -a /config_files/test_web/. /var/www/test_web
+
+    - name: Move /config_files/test_web.conf to /etc/httpd/sites-available/test_web.conf
+      command: mv /config_files/test_web.conf /etc/httpd/sites-available/test_web.conf
+
+    - name: Activate the test_web virtual host
+      file: src=/etc/httpd/sites-available/test_web.conf dest=/etc/httpd/sites-enabled/test_web.conf state=link
+
+    - name: Copy test_web_SSL structure
+      command: cp -a /config_files/test_web_SSL/. /var/www/test_web_SSL
+
+    - name: Move /config_files/test_web_SSL.conf to /etc/httpd/sites-available/test_web_SSL.conf
+      command: mv /config_files/test_web_SSL.conf /etc/httpd/sites-available/test_web_SSL.conf
+
+    - name: Generate public and private keys
+      command: bash "/config_files/ssl/cert.sh"
+
+    - name: Move cert.crt to /etc/pki/tls/certs/cert.crt
+      command: mv cert.crt /etc/pki/tls/certs/cert.crt
+
+    - name: Move cert.key to /etc/pki/tls/certs/cert.key
+      command: mv cert.key /etc/pki/tls/private/cert.key
+
+    - name: Move /config_files/ssl.conf to /etc/httpd/conf.d/ssl.conf
+      command: mv /config_files/ssl.conf /etc/httpd/conf.d/ssl.conf
+
+    - name: Activate the test_web_SSL virtual host
+      file: src=/etc/httpd/sites-available/test_web_SSL.conf dest=/etc/httpd/sites-enabled/test_web_SSL.conf state=link
+
+    - name: Move /var/www/test_web/cpanel/htaccess to /var/www/test_web/cpanel/.htaccess
+      command: mv /var/www/test_web/cpanel/htaccess /var/www/test_web/cpanel/.htaccess
+
+    - name: Create /etc/httpd/.users_digest file
+      file:     
+        path: "{{item}}"
+        state: touch
+        owner: root
+        group: root
+        mode: 0755
+      with_items:
+        - '/etc/httpd/.users_digest'
+
+    - name: Generate USER user with PASSWORD user on REALM Digest and add it to /etc/httpd/.users_digest
+      shell: python /config_files/htdigest.py user --user user --pwd user --realm "Digest" > /etc/httpd/.users_digest
+
+    - name: Move /config_files/mod_evasive.conf to /etc/httpd/conf.d/mod_evasive.conf
+      command: mv /config_files/mod_evasive.conf /etc/httpd/conf.d/mod_evasive.conf
+
+    - name: Move /owasp-modsecurity-crs-3.2-dev/crs-setup.conf.example to /etc/modsecurity/crs-setup.conf
+      command: mv /owasp-modsecurity-crs-3.2-dev/crs-setup.conf.example /etc/modsecurity/crs-setup.conf
+
+    - name: Move /owasp-modsecurity-crs-3.2-dev/rules/ to /etc/modsecurity/
+      command: mv /owasp-modsecurity-crs-3.2-dev/rules/ /etc/modsecurity/
+
+    - name: Include Owasp CRS configuration
+      shell: echo "Include /etc/modsecurity/*.conf" >> /etc/httpd/conf.d/mod_security.conf
+
+    - name: Include Owasp CRS rules
+      shell: echo "Include /etc/modsecurity/rules/*.conf" >> /etc/httpd/conf.d/mod_security.conf
+
+    - name: Leave /usr/sbin/httpd binary with appropiate permissions and ownerships
+      file:     
+        path: "{{item}}"
+        state: file
+        owner: root
+        group: root
+        mode: 0511
+      with_items:
+        - '/usr/sbin/httpd'
+
+    - name: Add apache user to apache group
+      shell: usermod -g apache apache
+
+    - name: Change the owner of directories to launch httpd with apache user instead of root
+      file:     
+        path: "{{item}}"
+        state: directory
+        recurse: yes
+        owner: root
+        group: apache
+        mode: 0775
+      with_items:
+        - '/var/run/httpd/'
+        - '/var/log/httpd/'
+        - '/var/log/mod_evasive/'
+
+    - name: Disable apache user shell
+      shell: chsh -s /usr/sbin/nologin apache
+
+    - name: Allow httpd binary to create sockets on ports below 1024
+      shell: setcap 'cap_net_bind_service=+ep' "{{item}}"
+      with_items:
+        - '/usr/sbin/httpd'
+
+    - name: Place run-httpd.sh
+      command: mv /config_files/run-httpd.sh /run-httpd.sh
+
+    - name: Set permissions and ownerships of run-httpd.sh
+      file:     
+        path: "{{item}}"
+        state: file
+        owner: root
+        group: apache
+        mode: 0750
+      with_items:
+        - '/run-httpd.sh'

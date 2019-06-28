@@ -1,0 +1,156 @@
+---
+- hosts: localhost
+  become: yes
+  tasks:
+
+    - name: Move install_nginx.sh
+      command: mv /config_files/install_nginx.sh /install_nginx.sh
+
+    - name: Install nginx with http2, ssl, modsecurity and http_stub_status_module
+      command: sh install_nginx.sh
+
+    - name: Remove install_nginx.sh
+      file: path='/install_nginx.sh' state=absent
+
+    - name: Create user nginx
+      command: useradd -r nginx
+
+    - name: Add nginx user to nginx group
+      shell: usermod -g nginx nginx
+
+    - name: Install httpd-tools in order to use htpasswd
+      yum: name=httpd-tools state=installed
+
+    - name: Set modsecurity.conf in place
+      command: mv /config_files/modsecurity.conf /etc/nginx/modsec/modsecurity.conf
+
+    - name: Include Owasp CRS configuration
+      shell: echo "Include /etc/nginx/modsec/owasp-modsecurity-crs/crs-setup.conf" >> /etc/nginx/modsec/modsecurity.conf
+
+    - name: Include Owasp CRS rules
+      shell: echo "Include /etc/nginx/modsec/owasp-modsecurity-crs/rules/*.conf" >> /etc/nginx/modsec/modsecurity.conf
+
+    - name: Create directories to store the server blocks
+      file:     
+        path: "{{item}}"
+        state: directory
+        recurse: yes
+      with_items:
+        - '/var/www/'
+        - '/var/www/test_web/html'
+        - '/var/www/test_web_SSL/html'
+
+    - name: Leave /usr/sbin/nginx binary with appropiate permissions and ownerships
+      file:     
+        path: "{{item}}"
+        state: file
+        owner: root
+        group: root
+        mode: 0511
+      with_items:
+        - '/usr/sbin/nginx'
+
+    - name: Set own nginx.conf file
+      command: mv /config_files/nginx.conf /etc/nginx/nginx.conf
+
+    - name: Create the directories for SSL certificates
+      file:     
+        path: "{{item}}"
+        state: directory
+        recurse: yes
+      with_items:
+        - '/etc/nginx/ssl/certs'
+        - '/etc/nginx/ssl/private'
+
+    - name: Create the directory to store Server Blocks configuration files
+      file:     
+        path: "{{item}}"
+        state: directory
+        recurse: yes
+      with_items:
+        - '/etc/nginx/conf.d'
+
+    - name: Generate public and private keys
+      command: sh "/config_files/ssl/cert.sh"
+
+    - name: Copy nginx public key
+      command: mv nginx.crt /etc/nginx/ssl/certs/nginx.crt
+
+    - name: Copy nginx private key
+      command: mv nginx.key /etc/nginx/ssl/private/nginx.key
+
+    - name: Copy DH param
+      command: cp /config_files/ssl/dhparam.pem /etc/nginx/ssl/certs/dhparam.pem
+
+    - name: Copy test_web structure
+      command: cp -a /config_files/test_web/. /var/www/test_web/html
+
+    - name: Copy test_web_SSL structure
+      command: cp -a /config_files/test_web_SSL/. /var/www/test_web_SSL/html
+
+    - name: Set test_web server block configuration
+      command: mv /config_files/test_web.com.conf /etc/nginx/conf.d/test_web.com.conf
+
+    - name: Set test_web_SSL server block configuration
+      command: mv /config_files/test_web_SSL.com.conf /etc/nginx/conf.d/test_web_SSL.com.conf
+
+    - name: Set a list of blocked User-Agents
+      command: mv /config_files/useragent.rules /etc/nginx/useragent.rules
+
+    - name: Create /etc/nginx/.users_basic file
+      file:     
+        path: "{{item}}"
+        state: touch
+        owner: root
+        group: root
+        mode: 0755
+      with_items:
+        - '/etc/nginx/.users_basic'
+ 
+    - name: Generate USER user with PASSWORD user and add it to /etc/nginx/.users_basic
+      shell: htpasswd -b -c /etc/nginx/.users_basic user user
+
+    - name: Leave /usr/sbin/nginx binary with appropiate permissions and ownership
+      file:     
+        path: "{{item}}"
+        state: file
+        owner: root
+        group: root
+        mode: 0511
+      with_items:
+        - '/usr/sbin/nginx'
+
+    - name: Change the owner of directories to launch nginx with nginx user instead of root
+      file:     
+        path: "{{item}}"
+        state: directory
+        recurse: yes
+        owner: root
+        group: nginx
+        mode: 0775
+      with_items:
+        - '/var/log/nginx'
+        - '/var/run/nginx'
+        - '/etc/nginx/modsec/'
+        - '/usr/local/nginx/'
+
+    - name: Disable nginx user shell
+      shell: chsh -s /usr/sbin/nologin nginx
+
+    - name: Allow nginx binary to create sockets on ports below 1024
+      shell: setcap 'cap_net_bind_service=+ep' "{{item}}"
+      with_items:
+        - '/usr/sbin/nginx'
+
+    - name: Place run-nginx.sh
+      command: mv /config_files/run-nginx.sh /run-nginx.sh
+
+    - name: Set permissions and ownerships of run-nginx.sh
+      file:     
+        path: "{{item}}"
+        state: file
+        owner: root
+        group: nginx
+        mode: 0750
+      with_items:
+        - '/run-nginx.sh'

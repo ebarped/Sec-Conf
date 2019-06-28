@@ -1,0 +1,4 @@
+docker run -d local/centos-mariadb:1.0
+
+#Remember to comment USER and ENTRYPOINT sections
+docker run -it local/centos-mariadb:1.0 /bin/bash

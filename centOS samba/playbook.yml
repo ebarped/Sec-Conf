@@ -1,0 +1,186 @@
+---
+- name: Secure configuration for Samba
+  hosts: 127.0.0.1
+  connection: local
+  become: yes
+  tasks:
+
+      - name: Install samba server
+        yum: name=samba state=installed
+
+      - name: Create the needed groups
+        group:
+          name: "{{item}}"
+          state: present
+        with_items:
+          - 'smbuser'
+          - 'staff'
+          - 'workers'
+          - 'guest'
+
+      - name: Create smbuser user with appropiated group
+        user:
+          name: smbuser
+          password: '$6$O34cEwRQGta$QXPdru/KZMpeRYbpI.ekxLJoAAEzzFWHGVDf.1dHZwfUttAjuepmSfnnR9ypxROyHV.lF/Hn7PRU0vex/nEbE.'
+          groups: smbuser
+          state: present
+          shell: /bin/bash
+          system: yes
+          createhome: yes
+          home: /home/smbuser
+
+      - name: Create smbuser1 user with appropiated group
+        user:
+          name: smbuser1
+          password: '$6$O34cEwRQGta$QXPdru/KZMpeRYbpI.ekxLJoAAEzzFWHGVDf.1dHZwfUttAjuepmSfnnR9ypxROyHV.lF/Hn7PRU0vex/nEbE.'
+          groups: staff
+          state: present
+          shell: /bin/bash
+          system: no
+          createhome: no
+
+      - name: Create smbuser2 user with appropiated group
+        user:
+          name: smbuser2
+          password: '$6$O34cEwRQGta$QXPdru/KZMpeRYbpI.ekxLJoAAEzzFWHGVDf.1dHZwfUttAjuepmSfnnR9ypxROyHV.lF/Hn7PRU0vex/nEbE.'
+          groups: workers
+          state: present
+          shell: /bin/bash
+          system: no
+          createhome: no
+
+      - name: Create smbuser3 user with appropiated group
+        user:
+          name: smbuser3
+          password: '$6$O34cEwRQGta$QXPdru/KZMpeRYbpI.ekxLJoAAEzzFWHGVDf.1dHZwfUttAjuepmSfnnR9ypxROyHV.lF/Hn7PRU0vex/nEbE.'
+          groups: workers
+          state: present
+          shell: /bin/bash
+          system: no
+          createhome: no
+
+      - name: Create smbadmin user with appropiated group
+        user:
+          name: smbadmin
+          password: '$6$O34cEwRQGta$QXPdru/KZMpeRYbpI.ekxLJoAAEzzFWHGVDf.1dHZwfUttAjuepmSfnnR9ypxROyHV.lF/Hn7PRU0vex/nEbE.'
+          groups: staff
+          state: present
+          shell: /bin/bash
+          system: no
+          createhome: no
+
+      - name: Create guest user with appropiated group
+        user:
+          name: guest
+          password: '$6$zCRKd5QsKG$sYsdx8tmVdAXDv4G63Q5YHwpEOL1ldfM6JHZq7KQTkIQTAJS66J7mNYkP/gYAWvKPugkeS7NJPAn1V7CP2ued1'
+          groups: guest
+          state: present
+          shell: /bin/bash
+          system: no
+          createhome: no
+
+      - name: Create directory to /protected share
+        file:
+          path: /home/smbuser/protected
+          state: directory
+
+      - name: Create directory to /shared share
+        file:
+          path: /home/smbuser/shared
+          state: directory
+
+      - name: Create directory to /public share
+        file:
+          path: /home/smbuser/public
+          state: directory
+
+      - name: Copy prueba.txt to /home/smbuser/shared
+        command: cp /config_files/prueba.txt /home/smbuser/shared/prueba.txt
+
+      - name: Copy prueba.txt to /home/smbuser/public
+        command: cp /config_files/prueba.txt /home/smbuser/public/prueba.txt
+
+      - name: Copy prueba.txt to /home/smbuser/protected
+        command: cp /config_files/prueba.txt /home/smbuser/protected/prueba.txt
+
+      - name: Check if /config_files/smb.conf exists
+        stat: path=/config_files/smb.conf
+        register: smb_conf_stat
+
+      - name: Move /config_files/smb.conf to /etc/samba/smb.conf
+        command: mv /config_files/smb.conf /etc/samba/smb.conf
+        when: smb_conf_stat.stat.exists
+
+      - name: Ensure files under /home/smbuser belong to smbuser:smbuser and set 755
+        file:   
+          path: /home/smbuser
+          owner: smbuser
+          group: smbuser
+          mode: 0755
+          state: directory
+          recurse: yes
+
+      - name: Ensure files under /home/smbuser/protected belong to smbuser:staff and set 775
+        file:   
+          path: /home/smbuser/protected
+          owner: smbuser
+          group: staff
+          mode: 0775
+          state: directory
+          recurse: yes
+
+      - name: Create credentials for smbuser with pass smbpass
+        command: sh /config_files/adduser_samba.sh
+
+      - name: Set sticky bit + 755 on /home/smbuser/public to allow writing but no remove
+        file:
+          path: /home/smbuser/public
+          mode: u=rwx,g=rx,o=rx,a+t
+          state: directory
+
+      - name: Set sticky bit + 755 on /home/smbuser/shared to allow writing but no remove
+        file:
+          path: /home/smbuser/shared
+          mode: u=rwx,g=rx,o=rx,a+t
+          state: directory
+
+      - name: Set sticky bit + 775 on /home/smbuser/protected to allow writing but no remove
+        file:
+          path: /home/smbuser/protected
+          mode: u=rwx,g=rwx,o=rx,a+t
+          state: directory
+
+      - name: Set appropiate permissions to these directories
+        file:     
+          path: "{{item}}"
+          state: directory
+          recurse: yes
+          owner: root
+          group: root
+        with_items:
+          - '/var/log/samba'
+          - '/run/samba'
+          - '/var/lib/samba'
+
+      - name: Set appropiate permissions to smb.cnf
+        file:     
+          path: "{{item}}"
+          state: file
+          owner: root
+          group: root
+        with_items:
+          - '/etc/samba/smb.conf'
+
+      - name: Leave /usr/sbin/smbd binary with appropiate permissions and ownerships
+        file:     
+          path: "{{item}}"
+          state: file
+          owner: root
+          group: root
+          mode: 0511
+        with_items:
+          - '/usr/sbin/smbd'
+
+      - name: Place run-samba.sh
+        command: mv /config_files/run-samba.sh /run-samba.sh
+

@@ -1,0 +1,64 @@
+---
+- name: Secure configuration for NFS
+  hosts: 127.0.0.1
+  connection: local
+  become: yes
+  tasks:
+
+    - name: Install nfs-utils
+      yum: name=nfs-utils state=installed
+
+    - name: Install stunnel
+      yum: name=stunnel state=installed
+
+    - name: Create the directories tree to export
+      file:     
+        path: "{{item}}"
+        state: directory
+      with_items:
+        - '/exports'
+        - '/exports/export_staff'
+        - '/exports/export_workers'
+
+    - name: Check if /config_files/exports exists
+      stat: path=/config_files/exports
+      register: exports_stat
+
+    - name: Move /config_files/exports to /etc/exports
+      command: mv /config_files/exports /etc/exports
+      when: exports_stat.stat.exists
+
+    - name: Move /config_files/nfs.conf to /etc/nfs.conf
+      command: mv /config_files/nfs.conf /etc/nfs.conf
+
+    - name: Move /config_files/nfs to /etc/sysconfig/nfs
+      command: mv /config_files/nfs /etc/sysconfig/nfs
+
+    - name: Move /config_files/stunnel/nfs-tls.pem to /etc/stunnel/nfs-tls.pem
+      command: mv /config_files/stunnel/nfs-tls.pem /etc/stunnel/nfs-tls.pem
+
+    - name: Change permissions of /etc/stunnel/nfs-tls.pem in order to belong to root:root
+      file:   
+        path: /etc/stunnel/nfs-tls.pem
+        owner: root
+        group: root
+        mode: 0400
+
+    - name: Move /config_files/stunnel/stunnel.conf to /etc/stunnel/stunnel.conf
+      command: mv /config_files/stunnel/stunnel.conf /etc/stunnel/stunnel.conf
+
+    - name: Create the directory /var/empty/stunnel with owner nobody:nobody
+      file:     
+        path: "{{item}}"
+        state: directory
+        recurse: yes
+        owner: nobody
+        group: nobody
+      with_items:
+        - '/var/empty/stunnel'
+        - '/var/empty/stunnel/stunnel'
+
+    - name: Place run-nfs.sh
+      command: mv /config_files/run-nfs.sh /run-nfs.sh
+
+

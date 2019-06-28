@@ -1,0 +1,4 @@
+docker run -d local/centos-samba:1.0
+
+#Remember to comment ENTRYPOINT section
+docker run -it local/centos-samba:1.0 /bin/bash

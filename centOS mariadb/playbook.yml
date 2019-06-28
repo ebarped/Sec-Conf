@@ -1,0 +1,208 @@
+---
+- name: Secure configuration for MariaDB
+  hosts: 127.0.0.1
+  connection: local
+  become: yes
+  tasks:
+
+    - name: Add REPO to install MariaDB 10.3.16
+      command: mv /config_files/mariadb.repo /etc/yum.repos.d/mariadb.repo
+
+    - name: Remove hostname utility
+      yum:
+        name: hostname
+        state: absent
+
+    - name: Install hostname utility
+      yum:
+        name: hostname
+        state: latest
+
+    - name: Install which utility
+      yum:
+        name: which
+        state: latest
+
+    - name: Copy secure-mysql.sh to /secure-mysql.sh
+      command: cp /config_files/secure-mysql.sh /secure-mysql.sh
+
+    - name: Copy usersDB.sql to /usersDB.sql
+      command: cp /config_files/usersDB.sql /usersDB.sql
+
+    - name: Install mariaDB 10.3.16
+      yum:
+        name: MariaDB-server-10.3.16-1.el7.centos
+        state: installed
+
+    - name: Create /var/log/mariadb directory
+      file: path='/var/log/mariadb' state=directory
+
+    - name: Ensure files under /var/lib/mysql belong to mysql:mysql
+      file:   
+        path: /var/lib/mysql
+        owner: mysql
+        group: mysql
+        state: directory
+        recurse: yes
+
+    - name: Ensure files under /var/log/mariadb belong to mysql:mysql
+      file:   
+        path: /var/log/mariadb
+        owner: mysql
+        group: mysql
+        state: directory
+        recurse: yes
+
+    - name: Move /config_files/my.cnf to /etc/my.cnf
+      command: mv /config_files/my.cnf /etc/my.cnf
+
+    - name: Change permissions of my.cnf in order to belong to root:root
+      file:   
+        path: /etc/my.cnf
+        owner: root
+        group: root
+        mode: 0600
+
+    - name: Create log files
+      file:   
+        path: "{{ item }}"
+        state: touch
+        owner: mysql
+        group: mysql
+        mode: 0600
+      with_items:
+        - /var/log/mariadb/error.log
+
+    - name: Create dir /var/lib/mysql/encryption/ to store encryption keys
+      file:   
+        path: /var/lib/mysql/encryption/
+        owner: mysql
+        group: mysql
+        state: directory
+        recurse: yes
+
+    - name: Create dir /var/lib/mysql/encryption/ssl to store ssl certificates
+      file:   
+        path: /var/lib/mysql/encryption/ssl
+        owner: mysql
+        group: mysql
+        state: directory
+        recurse: yes
+
+    - name: Generate 2 indexes for the keys into /indexes
+      shell: echo {{ item }} >> /indexes
+      with_items:
+        - 1
+        - 2
+
+    - name: Generate 2 32 Bytes encryption keys into /keys
+      shell: openssl rand -hex {{ item }} >> /keys
+      with_items:
+        - 32
+        - 32
+
+    - name: Join the indexes and keys files into one in /var/lib/mysql/encryption/keys
+      shell: paste -d ";" indexes keys > /var/lib/mysql/encryption/keys
+
+    - name: Generate 128 Bytes encryption key into /var/lib/mysql/encryption/keyfile.key
+      shell: openssl rand -hex 128 > /var/lib/mysql/encryption/keyfile.key
+
+    - name: Encrypt /var/lib/mysql/encryption/keyfile.key with /var/lib/mysql/encryption/keyfile.key
+      shell: openssl enc -aes-256-cbc -md sha1 -pass file:/var/lib/mysql/encryption/keyfile.key -in /var/lib/mysql/encryption/keys -out /var/lib/mysql/encryption/keyfile.enc
+
+    - name: Copy certificates to /var/lib/mysql/encryption/ssl/
+      command: cp /config_files/ssl/{{ item }} /var/lib/mysql/encryption/ssl/{{ item }}
+      with_items:
+        - ca-cert.pem
+        - server-cert.pem
+        - server-key.pem
+
+    - name: Start mariaDB daemon to make some configuration changes
+      shell: /usr/bin/mysqld_safe --datadir='/var/lib/mysql' &
+
+    - name: Wait until mysqld is started
+      wait_for:
+        path: /var/log/mariadb/error.log
+        search_regex: "/usr/sbin/mysqld: ready for connections"
+
+    - name: Execute a secure installation of MariaDB
+      command: sh /config_files/secure-mysql.sh {{ mysqlroot_password }}
+
+    - name: Create and fill database usersDB
+      shell: mysql -u root -pMysqlp4ss! < /usersDB.sql
+
+    - name: Give ALL PRIVILEGES to mysqladmin
+      shell: mysql -u root -pMysqlp4ss! -e "GRANT ALL PRIVILEGES ON usersDB.* TO 'mysqladmin'@'172.17.0.1' IDENTIFIED BY '{{ mysqluser_password }}' REQUIRE X509 WITH GRANT OPTION "
+
+    - name: Give SELECT privileges to mysqluser1
+      shell: mysql -u root -pMysqlp4ss! -e "GRANT SELECT ON usersDB.* TO 'mysqluser1'@'172.17.0.1' IDENTIFIED BY '{{ mysqluser_password }}' REQUIRE X509"
+
+    - name: Give SELECT privileges to mysqluser2
+      shell: mysql -u root -pMysqlp4ss! -e "GRANT SELECT ON usersDB.* TO 'mysqluser2'@'172.17.0.1' IDENTIFIED BY '{{ mysqluser_password }}' REQUIRE X509"
+
+    - name: FLUSH privileges (reload the grant tables)
+      shell: mysql -u root -pMysqlp4ss! -e "FLUSH PRIVILEGES"
+
+    - name: Empty error.log
+      shell: echo "" > '/var/log/mariadb/error.log'
+
+    - name: Empty server_audit.log
+      shell: echo "" > '/var/log/mariadb/server_audit.log'
+
+    - name: Remove the indexes file, keys file and unencrypted keys files
+      file: 
+        path: "{{ item }}"
+        state: absent
+      with_items:
+        - indexes
+        - keys
+        - /var/lib/mysql/encryption/keys
+
+    - name: Remove the usersDB.sql file
+      file: path="usersDB.sql" state=absent
+
+    - name: Remove the secure-mysql.sh file
+      file: path="secure-mysql.sh" state=absent
+
+    - name: Leave /usr/bin/mysqld_safe and /usr/sbin/mysqld binaries with appropiate permissions and ownerships
+      file:     
+        path: "{{item}}"
+        state: file
+        owner: root
+        group: mysql
+        mode: 0551
+      with_items:
+        - '/usr/sbin/mysqld'
+        - '/usr/bin/mysqld_safe'
+
+    - name: Change the owner of my.cnf to launch mysqld_safe with mysql user instead of root
+      file:     
+        path: "/etc/my.cnf"
+        state: file
+        owner: root
+        group: mysql
+        mode: 0551
+
+    - name: Change the owner of directories to launch MariaDB with mysql user instead of root
+      file:     
+        path: "{{item}}"
+        state: directory
+        recurse: yes
+        owner: root
+        group: mysql
+        mode: 0775
+      with_items:
+        - '/var/log/mariadb'
+        - '/var/lib/mysql'
+
+    - name: Disable mysql user shell
+      shell: chsh -s /usr/sbin/nologin mysql
+
+    - name: Place run-mariadb.sh
+      command: mv /config_files/run-mariadb.sh /run-mariadb.sh
+
+  vars:
+    mysqlroot_password: Mysqlp4ss!
+    mysqluser_password: Mysqlp4ss!
+
+
